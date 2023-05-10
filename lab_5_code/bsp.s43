@@ -1,0 +1,97 @@
+#include  "bsp.h"
+//#include <msp430g2553.h>
+//#include  <msp430xG46x.h>
+
+
+            MODULE BSP
+            PUBLIC GPIOconfig,xorCCIS0,clearT,takeTACCR1toR6,confS1,confS3
+            EXTERN main,PBs_handler,TIMER_A0_ISR,TIMER_A1_ISR,value
+            
+            RSEG   CODE  
+
+;-----------------------------------------------------------------------------  
+;           GPIO congiguration
+;-----------------------------------------------------------------------------
+GPIOconfig 
+             mov.w   #WDTPW+WDTHOLD,&WDTCTL   ; hold watchdog timer
+             ; PushButtons Setup
+             bic.b   #0xeB,&P2SEL //P2.0-P2.2 and p2.5,6,7 to I/O mode (0,1=PB0,PB1|5,6,7 =LCD control)
+             bis.b   #0x04,&P2SEL
+             bis.b  #0x04,&P2DIR
+             bic.b   #0x0B,&P2DIR    //P2.0-P2.1 to INPUT mode  
+             bis.b   #0xe4,&P2DIR    //P2.2,5,6,7 to OUTPUT mode
+             bis.b   #0x03,&P2IES //pull-up - call interrupt on falling edge -for PB0,PB1
+             bic.b   #0x0C,&P2IES //pull-down -call interrupt on rising edge -for PB2,PB3
+             bis.b   #0x0f,&P2IE      //allow interrupts localy on PB0,PB1(pull up) and PB2,PB3(pull down) 
+             bic.b   #0x0f,&P2IFG    //clear pending interrupts on all PBs
+            ;A timer setup
+            ;------------------------------------------------------------------
+            ;Timer A stability check
+            ;------------------------------------------------------------------
+/*SetupFLL    bis.b   #XCAP_3,&FLL_CTL0     ; Configure load caps
+OFIFGcheck  bic.b   #OFIFG,&IFG1            ; Clear OFIFG
+            mov.w   #047FFh,R14             ; Wait for OFIFG to set again if
+OFIFGwait   dec.w   R14                     ; not stable yet
+            jnz     OFIFGwait
+            bit.b   #OFIFG,&IFG1            ; Has it set again?
+            jnz     OFIFGcheck              ; If so, wait some more*/
+            ;------------------------------------------------------------------
+             mov.w   #CCIE,Timer_ACC0_cnrl            // CCR0 interrupt enabled
+                  //compare value for ACC0
+             //used for state1 - 1 sec interrupt delay via compare mode
+             ;------------------------------------------------------
+              mov.w   #CM_3+SCS+CAP+CCIS_2+CCIE,Timer_ACC2_cnrl   ;capture setting
+             ;-------------------------------------------------------
+             /*when TAR=0, 
+             call interapt,2(up and down)*8(div freq by 8)*65535(TACCR0)~1048218 cycles*/ 
+             mov.w   #TASSEL_2+MC_3+ID_3,Timer_A_cnrl 
+           
+           /*Timer A clock source select: 2 - SMCLK
+             Timer A mode control: 3 - Up/Down to CCR0
+             Timer A input divider: 3 - /8 */
+             CLR     TAR //clear A timer register
+             ;---------------------------------------------------------------
+             ; LCD Setup
+             ;---------------------------------------------------------------
+             bic.b   #0xFF,&P1SEL //set P1 to I/O mode - LCD Port
+             bis.b   #0xFF,&P1DIR //set P1 to OUTPUT mode - LCD Port
+             ;---------------------------------------------------------------     
+             ret
+;------------------------------------------------------------------------------------
+;xorCCIS0
+;------------------------------------------------------------------------------------
+xorCCIS0 xor.w #CCIS0,Timer_ACC1_cnrl  //xor bit CCIS0 in TACCTL1
+         ret
+;---------------------------------------------------------------------------------------
+clearT   CLR  TAR 
+         ret
+;---------------------------------------------------------------------------------------
+takeTACCR1toR6   mov.w &TACCR1,R6 
+                 ret
+;---------------------------------------------------------------------------------------
+confS1       mov.w   #65535,&TACCR0 
+             ret
+        
+confS3       mov.w   #TASSEL_2+MC_3,Timer_A_cnrl1
+             mov.w   #OUTMOD_4,TA1CCTL1
+             mov.w   #164,&TA1CCR0 //656
+             mov.w   #82,&TACCR1  //328
+                       
+ 
+
+             ret
+;----------------------------------------------
+             COMMON  INTVEC   ; Interrupt Vectors-Begins a common segment name of INTVEC 
+;--------------------------------------------------------------------------------------
+             ORG     PORT2_VECTOR       ;PORT2 Interrupt Vector
+             DW      PBs_handler        ; interrupt handler = ISR
+             ORG     TIMER0_A0_VECTOR       
+             DW      TIMER_A0_ISR           ;timer A0 interrupt service routine
+             ORG     TIMER0_A1_VECTOR       
+             DW      TIMER_A1_ISR           ;timer A1 interrupt service routine
+            
+             ORG     RESET_VECTOR       ; MSP430 RESET Vector
+             DW      main  
+   
+             ENDMOD
+             END
