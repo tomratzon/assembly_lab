@@ -1,0 +1,76 @@
+#include <MSP430G2553.h>
+
+;================= MODULE-PortsSetUp ================================
+            MODULE    PortSetup
+            PUBLIC    State1,State2,State4,wait1sec ;public functions
+            RSEG      CODE
+
+
+
+;__________________________________  //we need 1048576 cycles for 1 sec        
+wait1sec   MOV.W #32,R14            //3 cycles    ; Delay to R14, #32 --> R15  
+L1         MOV.W #5461,R15      //3 cycles       ; Delay to R15, #5461 --> R15  
+L2         DEC.W R15             //3 cycles       
+           JNZ   L2              //3 cycles       in each iteration L1 burn 6 cycles  
+           DEC.W R14             //3 cycles       and the inner loop L2 burn 6 cycles
+           JNZ L1              //3 cycles       32*((5461*6)+6)=1048704~1 sec
+           RET
+;______________________________________________________
+
+
+State1   CLR R10 //R10=0
+LS1      BIC.B #0xff,&P2OUT //P2OUT=0x00
+         BIS.B R10,&P2OUT //set P2OUT by R10 value
+         call #wait1sec //call wait1sec func
+         CMP.B #0x31,&P1IN //check if P1IN state is the same 
+         JNZ Back //if not jump to Back
+         INC R10 //R10 ++
+         CMP.W #0xff,R10 //check if R10 at his mac value
+         JEQ State1 // if it is jump to State1
+         JMP LS1 // jump to LS1
+         
+         
+State2   MOV #0xff,R10 //R10=0
+LS2      BIC.B #0xff,&P2OUT //P2OUT=0xff
+         BIS.B R10,&P2OUT //set P2OUT by R10 value
+         call #wait1sec //call wait1sec func
+         CMP.B #0x32,&P1IN //check if P1IN state is the same 
+         JNZ Back //if not jump to Back
+         DEC R10 //R10 --
+         JZ State2 //if R10 == 0 the jump to State2
+         JMP LS2 // jump to LS2   
+         
+         
+         ;Id1 section;
+State4   MOV 6(SP),R8 //size from stack to R8
+         MOV 4(SP),R4 //Id1 address from stack to R4
+Loop1    MOV @R4+,R6   //M[R4] into R6, R4+=2
+         BIC.B #0xff,&P2OUT //P2OUT=0xff
+         BIS.B R6,&P2OUT //set P2OUT by R6 value
+         call #wait1sec //call wait1sec func
+         CMP.B #0x34,&P1IN //check if P1IN state is the same 
+         JNZ Back //if not jump to Back
+         DEC R8          // R8 --
+         JNZ Loop1       //if R8!=0 go to Loop1
+         ;Id2 section;
+         MOV 6(SP),R8 //size from stack to R8
+         MOV 2(SP),R5 //Id2 address from stack to R5
+Loop2    MOV @R5+,R7   ////M[R5] into R7,R5+=2
+         BIC.B #0xff,&P2OUT //P2OUT=0xff
+         BIS.B R7,&P2OUT //set P2OUT by R7 value
+         call #wait1sec //call wait1sec func
+         CMP.B #0x34,&P1IN //check if P1IN state is the same 
+         JNZ Back //if not jump to Back
+         DEC R8          // R8 --
+         JNZ Loop2       //if R8!=0 go to Loop2
+         JMP State4      //START THE ALL ROTATION FROM ID1
+
+Back     BIC.B #0xff,&P2OUT //P2OUT=0xff
+         RET  //return from function to the top stack pointer   
+         
+          
+          
+          
+      ENDMOD
+;---------------------------------------------------------
+END
