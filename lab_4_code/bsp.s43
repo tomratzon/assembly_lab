@@ -1,0 +1,39 @@
+#include  "bsp.h"
+
+            MODULE BSP
+            PUBLIC GPIOconfig
+            EXTERN main,PBs_handler
+            
+            RSEG   CODE                    
+;-----------------------------------------------------------------------------  
+;           GPIO congiguration
+;-----------------------------------------------------------------------------
+GPIOconfig 
+             mov.w   #WDTPW+WDTHOLD,&WDTCTL   ; hold watchdog timer
+            ; PushButtons Setup
+             bic.b   #0xff,&P2SEL    //P2.0-P2.7 to I/O mode
+             bic.b   #0x7f,&P2DIR    //P2.0-P2.3 to INPUT mode
+             bis.b   #0x80,&P2DIR    //P2.7 to OUTPUT mode
+             bis.b   #0x03,&P2IES //pull-up - call interrupt on falling edge 
+             bic.b   #0x0C,&P2IES //pull-down -call interrupt on rising edge
+             bis.b   #0x0f,&P2IE      //allow interrupts localy on PB0,PB1(pull up) and PB2(pull down) 
+             bic.b   #0x0f,&P2IFG    //clear pending interrupts on all PBs
+             
+             ; LEDs Setup
+             bic.b   #0xFF,&P1SEL //P1.0-P1.7 to I/O mode
+             bis.b   #0xFF,&P1DIR//P1.0-P1.7 to OUTPUT mode
+             clr.b   &P2OUT         //clear LEDs
+             
+             ret
+;------------------------------------------------------------------------------------- 
+
+;---------------------------------------------------------------------------------------                  
+             COMMON  INTVEC   ; Interrupt Vectors-Begins a common segment name of INTVEC 
+;--------------------------------------------------------------------------------------
+             ORG     PORT2_VECTOR       ;PORT2 Interrupt Vector
+             DW      PBs_handler        ; interrupt handler = ISR
+             ORG     RESET_VECTOR       ; MSP430 RESET Vector
+             DW      main  
+   
+             ENDMOD
+             END
