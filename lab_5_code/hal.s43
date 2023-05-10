@@ -1,0 +1,266 @@
+#include  "bsp.h"
+;------------------------------------------------------------------- 
+;                LCD macro function
+;------------------------------------------------------------------- 
+Lcd_cmd      MACRO command
+             call   #Delay15ms
+             mov.b command, LCD_DATA_Byte
+             call  #Lcd_strobe
+             ENDM
+;-------------------------------------------------------------
+;             LCD Increacment display
+;-------------------------------------------------------------             
+             
+Lcd_data     MACRO char
+             call   #Delay5ms
+             mov.b  #0, LCD_DATA_Byte
+             bis.b  #0x40, LCD_CONTROL
+             mov.b  char, LCD_DATA_Byte
+             call   #Lcd_strobe
+             bic.b  #0x40, LCD_CONTROL
+             ENDM  
+
+;-------------------------------------------------------------------------------------
+
+              MODULE HAL
+              PUBLIC SysConfig,PBs_handler,TIMER_A0_ISR,delay,Lcd_strobe,Delay5ms,printMeasurement
+              PUBLIC TIMER_A1_ISR,clearLCD
+              EXTERN GPIOconfig,xorCCIS0,clearT,takeTACCR1toR6
+              EXTERN state,uniSec,tenSec,,uniMin,,startME,endME,flag,measurement,hexPrint
+       
+
+              RSEG   CODE
+;------------------------------------------------------------------------------------- 
+Lcd_strobe  bis.b  #0x20, LCD_CONTROL 
+            nop
+            nop
+            bic.b  #0x20, LCD_CONTROL
+            ret 
+           
+;--------------------------------------------------------------------
+ 
+;             System Configuration  
+;--------------------------------------------------------------------
+SysConfig    call #GPIOconfig  //call GPIOconfig from bsp
+             ;------------------------------------------------------------------
+            
+
+               ;LCD_Init - as explaind in LCD preperation file (lab 3)
+             ;---------------------------------------------------------------
+             bic.b   #0xE0, LCD_CONTROL   // clear control legs
+             call    #Delay15ms
+             mov.b   #0x3F, LCD_DATA_Byte
+             call    #Lcd_strobe
+             call    #Delay5ms
+             mov.b   #0x3F, LCD_DATA_Byte
+             call    #Lcd_strobe
+             call    #Delay200us
+             mov.b   #0x3F, LCD_DATA_Byte
+             call    #Lcd_strobe    
+             Lcd_cmd #0x3C
+             Lcd_cmd #0x0F
+             Lcd_cmd #0x01
+             Lcd_cmd #0x06
+             Lcd_cmd #0x80
+             Lcd_cmd #0x02
+             
+             ret
+;--------------------------------------------------------------------
+;            PORT2 Interrupt Service Routine
+;-----------------------------------------------------------------------
+PBs_handler  push.w #debounceVal //handle the debounce problem of PB
+             call   #delay       //call delay func with debounce delay value 
+             
+             bit.b  #PB0,&P2IFG   //check if PB0 is pushed
+             jnz    PB0sel                  
+             bit.b  #PB1,&P2IFG   //check if PB1 is pushed
+             jnz    PB1sel
+             //bit.b  #PB2,&P2IFG   //check if PB2 is pushed
+             //jnz    PB2sel
+             bit.b  #PB3,&P2IFG   //check if PB2 is pushed
+             jnz    PB3sel
+             
+             reti                        //interapt happend from other source
+             
+PB0sel       mov    #1,state    //move 1 to state
+             mov    #PB0,R4     //which IntPend to clear
+             jmp    exitLPM0    //exit sleep mode LPM0
+             
+PB1sel       mov    #2,state    //move 2 to state
+             mov    #PB1,R4     //which IntPend to clear
+             jmp    exitLPM0    //exit sleep mode LPM0
+             
+//PB2sel       mov    #3,state    //move 3 to state
+ //            mov    #PB3,R4     //which IntPend to clear
+ //            jmp    exitLPM0    //exit sleep mode LPM0
+             
+PB3sel       mov    #3,state    //move 4 to state
+            mov    #PB3,R4     //which IntPend to clear
+            jmp    exitLPM0    //exit sleep mode LPM0
+
+
+exitLPM0     bic    #CPUOFF,0(SP)  //exit sleep mode LPM0
+             bic.b  R4,&P2IFG  //clear the current PB IntPent
+             bis.w  #GIE,SR
+             reti
+             
+;--------------------------------------------------------------------
+;            Timer A Interrupt Service Routine
+;-----------------------------------------------------------------------                    
+
+;------------------------------------------------------------------------------------------------------------------------------
+
+
+TIMER_A0_ISR    cmp.b  #0x01,state   //check if state 2
+                jeq   PrintLCD 
+                reti  
+TIMER_A1_ISR    add.w &TAIV,PC
+          
+                dint
+                tst.w flag            //if flag != 0
+                jne   flag_1          //jump to flag_1
+                call #takeTACCR1toR6 //capture TACCR1 value into startME
+                mov.w R6,startME
+                xor.w #0x01,flag      //change flag to 1
+                reti
+            
+flag_1          call #takeTACCR1toR6
+                mov.w R6,endME   //capture TACCR1 value into endME
+                xor.w #0x01,flag      //change flage to 0
+                reti
+                eint
+;----------------------------------------------------------------------------------------------
+;            Polling based Delay function 
+;----------------------------------------------------------------------------------------------                     
+delay        pop   R10        // save return address of the function
+             pop   r11        //get delay value from stack 62.5 ms 
+         
+                    
+L            dec.w   R11      //R11-=1               
+             jnz     L      //if R11!=0 jump to L 
+            
+             push.w  R10      //push the return address of the function back to stack
+             ret
+;------------------------------------------------------------------------------
+Delay200us  mov.w  #70,R15 //200us delay func -used for LCD init
+L200        dec.w  R15
+            jnz    L200
+            ret
+;------------------------------------------------------------------------------
+Delay5ms    mov.w  #1748,R15 //5ms delay func -used for LCD init
+L5          dec.w  R15
+            jnz    L5
+            ret
+;------------------------------------------------------------------------------
+Delay15ms   mov.w  #5242,R15 //15ms delay func -used for LCD init
+L15         dec.w  R15
+            jnz    L15
+            ret           
+;----------------------------------------------------------------------------------------------
+/*readTACCR1  dint
+            tst.w flag            //if flag != 0
+            jne   flag_1          //jump to flag_1
+            call #takeTACCR1toR6 //capture TACCR1 value into startME
+            mov.w R6,startME
+            xor.w #0x01,flag      //change flag to 1
+            reti
+            
+flag_1      call #takeTACCR1toR6
+            mov.w R6,endME   //capture TACCR1 value into endME
+            xor.w #0x01,flag      //change flage to 0
+            reti
+            eint*/
+;------------------------------------------------------------------------------------           s
+; INC and print display - called at TACCR0 interrupts
+printMeasurement Lcd_cmd  #0x01     //clear all chars from LCD
+                 Lcd_cmd  #0x02     // cursor to head of first line
+                 Lcd_data #0x52     // print 'R'
+                 Lcd_data #0x75     // print 'u'
+                 Lcd_data #0x6e     // print 'n'
+                 Lcd_data #0x20     // print ' '
+                 Lcd_data #0x74     // print 't'
+                 Lcd_data #0x69     // print 'i'
+                 Lcd_data #0x6d     // print 'm'
+                 Lcd_data #0x65     // print 'e'
+                 Lcd_data #0x3a     // print ':'
+                 Lcd_data #0x20     // print ' '
+                 mov.b +hexPrint,R8
+                 Lcd_data hexPrint
+                 //print measurement code
+                 mov #4,R7
+                 mov.w measurement,R8 //save measurement in R8
+loop4            rlc R8       //bit 15 go to carry
+                 rlc hexPrint //carry go to bit 0 
+                 rlc R8       //bit 15 go to carry
+                 rlc hexPrint //carry go to bit 0 
+                 rlc R8       //bit 15 go to carry
+                 rlc hexPrint //carry go to bit 0 
+                 rlc R8       //bit 15 go to carry
+                 adc hexPrint //carry go to bit 0 
+                 Lcd_data hexPrint //print the value of hexPrint to LCD
+                 clr hexPrint
+                 dec R7       //if R7!= jump to loop4
+                 jnz loop4 
+                 
+                 Lcd_cmd  #0xc0     // move cursor to the head of second row
+                 Lcd_data #0x76     // print 'v'
+                 Lcd_data #0x61     // print 'a'
+                 Lcd_data #0x6c     // print 'l'
+                 Lcd_data #0x75     // print 'u'
+                 Lcd_data #0x65     // print 'e'
+                 Lcd_data #0x20     // print ' '
+                 Lcd_data #0x5b     // print '['
+                 Lcd_data #0x63     // print 'c'
+                 Lcd_data #0x79     // print 'y'
+                 Lcd_data #0x63     // print 'c'
+                 Lcd_data #0x6c     // print 'l'
+                 Lcd_data #0x65     // print 'e'
+                 Lcd_data #0x5d     // print ']'
+                 Lcd_cmd #0x0c      //hide cursor
+                 
+                 ret
+;-------------------------------------------------------------
+;             LCD Increacment display
+;-------------------------------------------------------------  
+PrintLCD          
+                Lcd_cmd #0x01     //clear all chars from LCD
+                Lcd_cmd #0x02     // cursor to head of first line
+                cmp.b   #0x3A, uniSec //if uniSec != :(ASCII) which is after 9(ASCII) go to print
+                jne     print 
+                inc     tenSec        //tenSec++
+                mov     #0x30, uniSec //0x30(HEX)=0(ASCII)to uniSec
+                cmp.b   #0x36, tenSec //if R7 != :(ASCII) which is after 9(ASCII) go to print
+                jne     print
+                inc     uniMin        //uniMin++
+                mov     #0x30, tenSec //0x30(HEX)=0(ASCII)to tenSec
+                mov     #0x30, uniSec //0x30(HEX)=0(ASCII)to uniSec
+                
+print           Lcd_data  #0x30  //|
+                Lcd_data  uniMin //|
+                Lcd_data  #0x3A  //| prints [0|uniMin|:|tenSec|uniSec]
+                Lcd_data  tenSec //|
+                Lcd_data  uniSec //|
+                Lcd_cmd #0x0c    //hide cursor
+                cmp.b #0x32,uniMin //if LCD = x2:xx
+                jeq check    //jump to check
+                inc uniSec   //uniSec++  
+                reti
+check           cmp.b #0x31,uniSec //if LCD x2:x1
+                jeq exitLCD //jump to exitLCD
+                inc uniSec   //uniSec++ 
+                reti
+                
+exitLCD      //bic.w #0x10,Timer_ACC0_cnrl //disable interrupt on TACCR0
+             Lcd_cmd #0x01     //clear all chars from LCD
+             clr state
+             bic    #CPUOFF,0(SP)
+             reti
+clearLCD     Lcd_cmd #0x01
+             ret
+;------------------------------------------------------------------------------------
+
+             ENDMOD
+             END
+
+
+ 
