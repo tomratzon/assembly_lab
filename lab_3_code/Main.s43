@@ -1,0 +1,53 @@
+#include "msp430g2553.h" // #include <msp430.h> - can be used as well
+;-------------------------------------------------------------------------------
+           NAME       Main ;name of the main program
+           PUBLIC     RESET ;make the file public
+           EXTERN     State1,State2,State4 ;external function we need to call
+
+           ORG        0x1100 ; begins the RAM
+           RSEG       CSTACK    ; defines stack segment of 80 words (default)
+           RSEG       CODE   ; ORG 0x3100 - place program in 'CODE' segment in to Flash memory
+
+
+Id1 DW 0,9,0,0,8,2,9,1
+Id2 DW 1,5,3,9,5,6,9,9
+size DW 8
+
+;-----------------------------------------------------------------------------
+RESET       MOV.W   #SFE(CSTACK),SP          ; Initialize stackpointer
+
+StopWDT     MOV.W   #WDTPW+WDTHOLD,&WDTCTL  ; Stop WDT = #WDTPW+WDTHOLD -->M(&WDTCTL)  when #WDTPW+WDTHOLD it is constant number as #0x49+0x57
+                                            ; The names WDTPW,WDTHOLD are defined in the attached header file.
+BIC.B #0xff,&P2SEL  // P2 configuration into I/O mode
+BIS.B #0xff,&P2DIR  // P2 configuration into OUTPUT
+
+mainLoop  CMP.B #0x31,&P1IN //if P1IN==0x01
+          JEQ S1            //jump to S1
+          CMP.B #0x32,&P1IN //if P1IN==0x02
+          JEQ S2            //jump to S2
+          CMP.B #0x34,&P1IN //if P1IN==0x04
+          JEQ S4            //jump to S4             
+          JMP mainLoop //else jump to mainLoop
+
+S1  CALL #State1 //call State1 func in functions
+    JMP mainLoop //jump back to mainLoop
+S2  CALL #State2 //call State2 func in functions
+    JMP mainLoop //jump back to mainLoop
+S4  PUSH size
+    PUSH #Id1
+    PUSH #Id2
+    CALL #State4 //call State4 func in functions
+    POP R4 //pop Id2
+    POP R4 //pop Id1
+    POP R4 //pop size
+    JMP mainLoop //jump back to mainLoop
+
+
+   
+            nop                             ; NO MEANING, JUST TO AVOID FROM WARNING
+;------------------------------------------------------------------------------
+            COMMON  INTVEC                  ; Interrupt Vectors-Begins a common segment with name of INTVEC 
+;------------------------------------------------------------------------------
+            ORG     RESET_VECTOR            ; MSP430 RESET Vector
+            DW      RESET                   
+            END
