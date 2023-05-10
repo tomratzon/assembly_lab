@@ -1,0 +1,44 @@
+#include  "bsp.h"
+
+             MODULE API
+             PUBLIC DecLED,RotLEDLeft,Print_Arr
+             EXTERN ChangeLeds,ReadSWs,delayLoop,id,SIZE,delay_ms
+            
+             RSEG   CODE
+;-------------------------------------------------------------
+;             LEDs Decreacment counting
+;-------------------------------------------------------------
+DecLED       dec.b R15 //decrese R15 by 1
+             mov.b R15,&P1OUT //move state of led to port
+             ret
+;-------------------------------------------------------------
+;             LEDs muliply by 2
+;-------------------------------------------------------------
+RotLEDLeft   mov.b R14,&P1OUT //move state of led to port
+             rla.b R14             //rotate left R14
+             cmp.b #0,R14
+             jnz end1
+             mov.b #1,R14
+end1         ret
+           
+;-------------------------------------------------------------
+;             Print_Arr(id,size,ms)
+;-------------------------------------------------------------
+Print_Arr   
+          mov delay_ms,R9   //hold ms
+          mov SIZE,R8   //hold size
+          mov  #id,R7   //hold id
+L1        mov  @R7+,R6 //M[R7] to R6;R7+=2
+          mov.b  R6,&P1OUT
+          push R9       //push ms to stack
+          push #350     //push 247 to stac  ((250*3)247 cycles ~ 250ms)
+          call #delayLoop
+          dec  R8   //if R8==0 jump to L1
+          jnz  L1
+          
+      
+          ret
+
+;-------------------------------------------------------------
+             ENDMOD    
+             END
