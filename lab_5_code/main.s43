@@ -1,0 +1,65 @@
+#include  "bsp.h"
+             NAME   MAIN
+             PUBLIC state,main,measurement,uniSec,tenSec,uniMin,startME,endME,flag,hexPrint
+             PUBLIC value,freq
+             EXTERN SysConfig,delay,LCDfunc,tic,toc,test,Div,confS3,confS1
+             EXTERN clearLCD
+             
+;----------------------------------------------------------------------------------
+             ORG      DataSegStart         // Begins a DATA segment       
+state        DW   0                        // state variable - defult is 0
+measurement  DW   0                        //count the number of LCD prints per interrupt
+uniSec       DW   0                        //holds sec uinitary digit of LCD
+tenSec       DW   0                        //holds sec tens digit of LCD
+uniMin       DW   0                        //holds min uinitary digit of LCD
+startME      DW   0                        //start measurement value
+endME        DW   0                        //end measurement value
+flag         DW   0                        // flag to distinguish startME =0,endME=1
+hexPrint     DB   0x00  
+freq         DW   1600
+value        DW   0
+;-------------------------------------------------------------------------------------
+             ORG     CodeSegStart       // Program Reset = Begins a CODE segment
+        
+main         mov.w   #StackTosStart,SP  // Initialize stack pointer to the RAM end 
+             call    #SysConfig         // call SysConfig from hal
+             clr     state              // set to idle state at the beginning
+;---------------------- FSM_loop -------------------------------------
+state0       cmp     #0x00,state        //if state!=0 jump to state1          
+             jnz     state1
+             bis.w   #CPUOFF+GIE,SR //enter sleep mode LPM0, enable global interrupts
+;state1:             
+;---------------------------------------------------------------------
+state1       cmp     #0x01,state        //if state!=1 jump to state2 
+             jnz     state2
+             call    #confS1
+             call    #LCDfunc
+             cmp     #0x01,state        //if state!=1 jump to state2 
+             jnz     state2
+             jmp     exit
+             
+
+;state2:             
+;---------------------------------------------------------------------
+state2       cmp     #0x02,state        //if state!=2 jump to state3
+             jnz     state3  
+             call #tic
+             ;test code to measure by state 2
+             ;----------------------------------------------
+             call #test
+             ;----------------------------------------------
+             call #toc
+             
+             jmp     exit
+;state3:             
+;---------------------------------------------------------------------
+state3       cmp     #0x03,state        //if state!=3 jump to state0
+             jnz     state3
+             call    #clearLCD
+             call    #confS3
+             bis.w   #CPUOFF+GIE,SR
+             
+exit         clr     state //change state to 0
+             jmp     state0
+                 
+             END
