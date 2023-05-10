@@ -1,0 +1,47 @@
+#include <msp430xG46x.h>     ;define controlled include file
+
+         ORG 1100h
+Id1      DW   0,9,0,0,8,2,9,1   ; positive numbers
+Id2      DW   1,5,3,9,4,6,9,9   ; positive numbers
+Identical_indices_amount DS16 8
+Size     DW 8 // size of array
+
+         RSEG   CODE                  ; ORG   0x3100 - place program in 'CODE' segment in to Flash memory
+                              
+Main     
+          MOV #Id1, R5 //hold id1
+          MOV #Id2, R6 //hold id2
+          MOV Size, R7 //holds size of ids
+          MOV @R6,R8 //move value of R6 to R8
+          MOV #Identical_indices_amount,R11 //holds Identical_indices_amount
+          
+Comp      CLR R9 //0 to R9
+          MOV #16,R10 //16 to R10
+          XOR 0(R5),R8 //XOR of R5 and R8 into R8
+          XOR #-1,R8 //NOT of R8
+
+CountBits RRC R8 //rotate right with carry  of R8
+          ADC R9 //add carry to R9
+          DEC R10 //R10 -=1
+          JZ Next // if R10 009 jump to Next
+          JMP CountBits //jump to CountBits
+
+Next      MOV R9,0(R11)  //move R9 to value of R11
+          DEC R7 //R7 -=1
+          JZ Finish //if R7 ==0 jump to Finish
+          INCD R11 // R11+=2
+          INCD R5 //R5 +=2
+          INCD R6 //R6+=2
+          MOV @R6,R8 //mov value of R6 to R8 
+          JMP Comp // jump to Comp
+          
+Finish    NOP //end of program
+  
+L        JMP   L                            ; infinite loop
+         NOP                                ; to remove warnings
+;-------------------------------------------------------------------------------
+         COMMON  INTVEC                  ; Interrupt Vectors
+;-------------------------------------------------------------------------------
+         ORG     RESET_VECTOR            ; POR, ext. Reset
+         DW      Main
+         END
