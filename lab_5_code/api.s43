@@ -1,0 +1,68 @@
+#include  "bsp.h"
+
+             MODULE API
+             PUBLIC LCDfunc,tic,toc,test,Div
+             EXTERN delay_ms,state,readTACCR1,clearT,value,freq
+             EXTERN uniSec,tenSec,uniMin,printMeasurement,startME,endME,measurement,xorCCIS0
+            
+             RSEG   CODE
+;-------------------------------------------------------------
+;             LCD function 
+;-------------------------------------------------------------             
+LCDfunc         mov     #0x30, uniSec //0x30(HEX)=0(ASCII)to uniSec
+                mov     #0x30, tenSec //0x30(HEX)=0(ASCII)to tenSec
+                mov     #0x30, uniMin //0x30(HEX)=0(ASCII)to uniMin
+                cmp.b   #0x01, state   //if state has changed return to main -critical whrn returning from other inerrupt
+                jne finish
+                bis.w   #CPUOFF+GIE,SR //enter sleep mode LPM0, enable global interrupts
+
+                
+                ret
+;-------------------------------------------------------------
+;             Tic - Toc
+;-------------------------------------------------------------
+tic  
+      call #xorCCIS0
+     // call #clearT
+      ret
+      
+toc     call #xorCCIS0
+
+        nop
+        cmp.w startME,endME //if startME>=startME
+        jge upmode //go to upmode
+        mov.w  startME,measurement  
+        sub.w  endME,measurement
+        jmp finish
+upmode  mov.w  endME,measurement  //endME-startME->measurement
+        sub.w  startME,measurement
+finish  call #printMeasurement
+        ret
+;-------------------------------------------------------------
+; test function - do nothing, only for measurement
+;-------------------------------------------------------------
+test    mov #115,R13
+loop    dec R13
+        jnz loop
+        ret
+;-------------------------------------------------------------
+Div       mov.w #32768,R6 //2^15
+          CLR  R9
+          CMP  R6,freq              ;R6 /freq
+          JLO  Result
+          INC  R9
+          SUB  R6,freq
+          JMP  Div
+Result    rla R9
+          rla R9
+          rla R9
+          rla R9
+          rla R9
+          MOV  R9,value
+          ret
+
+
+
+
+             ENDMOD    
+             END
