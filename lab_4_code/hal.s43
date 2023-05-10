@@ -1,0 +1,89 @@
+#include  "bsp.h"
+
+              MODULE HAL
+              PUBLIC SysConfig,ClrLEDs,PBs_handler,delay,delayLoop
+              EXTERN GPIOconfig
+              EXTERN state
+            
+              RSEG   CODE
+;--------------------------------------------------------------------
+;             System Configuration  
+;--------------------------------------------------------------------
+SysConfig     call #GPIOconfig  //call GPIOconfig from bsp
+              ret
+;--------------------------------------------------------------------
+;Clear LEDs - void function (without arguments and return value)
+;--------------------------------------------------------------------
+ClrLEDs       clr.b &P1OUT //turn off all leds
+              ret                 
+;--------------------------------------------------------------------
+;            PORT2 Interrupt Service Routine
+;-----------------------------------------------------------------------
+PBs_handler  push.w #debounceVal //handle the debounce problem of PB
+             call   #delay       //call delay func with debounce delay value 
+             
+             bit.b  #PB0,&P2IFG   //check if PB0 is pushed
+             jnz    PB0sel                  
+             bit.b  #PB1,&P2IFG   //check if PB1 is pushed
+             jnz    PB1sel
+             bit.b  #PB2,&P2IFG   //check if PB2 is pushed
+             jnz    PB2sel
+             bit.b  #PB3,&P2IFG   //check if PB2 is pushed
+             jnz    PB3sel
+             
+             reti                        //interapt happend from other source
+             
+PB0sel       mov    #1,state    //move 1 to state
+             mov    #PB0,R4     //which IntPend to clear
+             jmp    exitLPM0    //exit sleep mode LPM0
+             
+PB1sel       mov    #2,state    //move 2 to state
+             mov    #PB1,R4     //which IntPend to clear
+             jmp    exitLPM0    //exit sleep mode LPM0
+             
+PB2sel       mov    #3,state    //move 3 to state
+             mov    #PB2,R4     //which IntPend to clear
+             jmp    exitLPM0    //exit sleep mode LPM0
+             
+PB3sel       mov    #4,state    //move 4 to state
+             mov    #PB3,R4     //which IntPend to clear
+             jmp    exitLPM0    //exit sleep mode LPM0
+
+
+exitLPM0     bic    #CPUOFF,0(SP)  //exit sleep mode LPM0
+             bic.b  R4,&P2IFG  //clear the current PB IntPent
+             bis.w  #GIE,SR
+             reti
+;----------------------------------------------------------------------------------------------
+;            Polling based Delay function 
+;----------------------------------------------------------------------------------------------                     
+delay        pop   R10        // save return address of the function
+             pop   r11        //get delay value from stack 62.5 ms 
+         
+                    
+L            dec.w   R11      //R11-=1               
+             jnz     L      //if R11!=0 jump to L 
+            
+             push.w  R10      //push the return address of the function back to stack
+             ret
+;----------------------------------------------------------------------------------------------
+;            Polling based Delay function n*m  2 variables from stack
+;----------------------------------------------------------------------------------------------                     
+delayLoop    pop   R10        //save return address of the function
+             pop   R11        //get number of time to run n delay from stack
+L1           MOV   0(SP),R12  //get delay value from stack m ;
+                    
+L2           dec.w   R12      //R12-=1; 1 cycle               | 3*m=3m 
+             jnz     L2      //if R12!=0 jump to L2; 2 cycles | 3 cycles* m=750 cycles 
+             dec     R11      //R11-=1 ; 12 cycle             |
+             jnz     L1      //if R11!=0 jump to L1  2 cycles |(n *(3m))+3 cycles~250 ms
+
+             pop.w   R11      //clear stack from extra delay value
+             push.w  R10      //push the return address of the function back to stack
+             ret
+;----------------------------------------------------------------------------------------------
+             ENDMOD
+             END
+
+
+ 
