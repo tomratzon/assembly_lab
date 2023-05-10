@@ -1,5 +1,5 @@
 # assembly_lab
-all assignments are made as a simulation for MSP460 CPU  
+all assignments are made as a simulation for MSP430 CPU  
 lab1 - creates the array identical_indices_amount. identical_indices_amount[i] = num of identical bits between the valuse of id1[i] and id2[i] (16 bits representation).
 
 lab2 - creates Parity1 from id1 and Parity2 from id2 which contains 1 if id[i] is odd and 0 if id[i] is even. 
